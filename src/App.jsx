@@ -271,14 +271,45 @@ export default function App() {
 
   const updateQty = (id, delta) => setCart(c => c.map(i => i.id === id ? { ...i, qty: i.qty+delta } : i).filter(i => i.qty > 0));
 
-  const placeOrder = (customerInfo) => {
+  const sendOrderEmail = async (orderId, customerInfo, items, total) => {
+    try {
+      await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          service_id: "service_xkv782o",
+          template_id: "template_xdxvy08",
+          user_id: "PKdOU1ehzoxYx1CCY",
+          template_params: {
+            order_id: orderId,
+            customer_name: customerInfo.name,
+            customer_email: customerInfo.email,
+            customer_phone: customerInfo.phone,
+            customer_address: `${customerInfo.address}, ${customerInfo.city}, ${customerInfo.province} ${customerInfo.postal}`,
+            amount: `R${total.toLocaleString()}`,
+            item_description: items.map(i => `${i.name} x${i.qty}`).join(", "),
+            payment_status: "Pending Payment",
+          },
+        }),
+      });
+    } catch (e) {
+      console.error("EmailJS error:", e);
+    }
+  };
+
+  const placeOrder = async (customerInfo) => {
     const orderId = String(Date.now()).slice(-6);
     const newOrder = { id: orderId, createdAt: new Date().toISOString(), customer: customerInfo, items: cart.map(i => ({...i})), total: cartTotal, status: "Pending" };
     setOrders(o => [newOrder, ...o]);
+
+    // Send frontend email immediately (backup notification)
+    await sendOrderEmail(orderId, customerInfo, cart, cartTotal);
+
     const params = {
       merchant_id: "35699151", merchant_key: "bfldtgx8cgmsk",
       return_url: "https://lm-couture.vercel.app/?payment=success",
       cancel_url: "https://lm-couture.vercel.app/?payment=cancelled",
+      notify_url: "https://lm-couture.vercel.app/api/payfast-itn",
       name_first: customerInfo.name.split(" ")[0],
       name_last: customerInfo.name.split(" ").slice(1).join(" ") || customerInfo.name,
       email_address: customerInfo.email, cell_number: customerInfo.phone,
